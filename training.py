@@ -52,46 +52,47 @@ def create_cnn(input_shape=(8, 8, 12)):
 
 cnn_model = create_cnn()
 
-def read_games(pgn_file_path):
+def data_stream(pgn_file_path, batch_size, max_moves_per_game=50):
     with open(pgn_file_path, "r") as pgn_file:
         while True:
             game = chess.pgn.read_game(pgn_file)
             if game is None:
                 break
-            yield game
+
+            X = []
+            y = []
+
+            board_state = game.board().fen()  # Store the board state as a string
+            result = {"1-0": 1, "0-1": -1, "1/2-1/2": 0}[game.headers["Result"]]
+
+            for i, move in enumerate(game.mainline_moves()):
+                if i >= max_moves_per_game:
+                    break
+
+                board = chess.Board(board_state)
+                board.push(move)
+                board_state = board.fen()
+
+                X.append(board_to_feature_vector(board))
+                y.append(result)
+
+                if len(X) == batch_size:
+                    yield np.array(X), np.array(y)
+                    X.clear()
+                    y.clear()
 
 
-def data_stream(games, batch_size):
-    X = []
-    y = []
 
-    for game in tqdm(games, desc="Processing games"):
-        board = game.board()
-        result = {"1-0": 1, "0-1": -1, "1/2-1/2": 0}[game.headers["Result"]]
 
-        for i, move in enumerate(game.mainline_moves()):
-            board.push(move)
-            X.append(board_to_feature_vector(board))
-            y.append(result)
-
-            if len(X) == batch_size:
-                yield np.array(X), np.array(y)
-                X.clear()
-                y.clear()
-
-num_games = 100
-games_subset = games[:num_games]
-positions, results = get_positions_and_results(games_subset)
-
-X_train, X_val, y_train, y_val = train_test_split(positions, results, test_size=0.2)
-epochs = 10
-batch_size = 32
+batch_size = 16
+num_games = 1
 
 # Measure the start time
 start_time = time.time()
 
-for X_batch, y_batch in data_stream(read_games(pgn_file_path), batch_size):
+for X_batch, y_batch in data_stream(pgn_file_path, batch_size, max_moves_per_game=30):
     cnn_model.train_on_batch(X_batch, y_batch)
+
 
 
 # Measure the end time
