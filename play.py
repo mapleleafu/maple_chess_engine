@@ -29,7 +29,6 @@ class ClassicValuator(object):
     def reset(self):
         self.count = 0
 
-    # https://en.wikipedia.org/wiki/Evaluation_function#In_chess
     def __call__(self, s):
         self.count += 1
         key = s.key()
@@ -117,7 +116,7 @@ class Valuator(object):
 
 def computer_minimax(s, v, depth, a, b, big=False):
     #! Change the depth, plays good with 5 depth 
-    if depth >= 4 or s.board.is_game_over(): 
+    if depth >= 5 or s.board.is_game_over(): 
         return v(s)
     # white is maximizing player
     turn = s.board.turn
