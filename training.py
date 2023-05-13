@@ -79,7 +79,7 @@ if __name__ == "__main__":
     total_examples = 0  
 
     try:
-        for X, Y in get_dataset(10000, 2000000):  # generate batches of 10000, stop after 2000000 total samples
+        for X, Y in get_dataset(10000, 5000000):  # generate batches of 10000, stop after Y total samples
             cnn_model.fit(X, Y, epochs=10)
             batch_rounds += 1 
             total_examples += len(X) 
