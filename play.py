@@ -1,9 +1,9 @@
-#!/usr/bin/env python3
-from __future__ import print_function
 import os
 import chess
 import time
 import traceback
+import signal
+import sys
 from state import State
 import numpy as np
 import tensorflow as tf
@@ -14,9 +14,12 @@ MAXVAL = 10000
 
 model = tf.keras.models.load_model('trained_model.h5')
 
+moves = []
+move_times = []
+
 class ClassicValuator(object):
     values = {chess.PAWN: 1,
-              chess.KNIGHT: 3,
+              chess.KNIGHT: 3.2,
               chess.BISHOP: 3.3,
               chess.ROOK: 5,
               chess.QUEEN: 9,
@@ -114,6 +117,8 @@ class Valuator(object):
         return val
 
 
+
+
 def computer_minimax(s, v, depth, a, b, big=False):
     #! Change the depth, plays good with 5 depth 
     if depth >= 5 or s.board.is_game_over(): 
@@ -127,9 +132,12 @@ def computer_minimax(s, v, depth, a, b, big=False):
     if big:
         bret = []
 
+    checks, captures, others = order_moves(s.board)
+    ordered_moves = checks + captures + others
+
     # can prune here with beam search
     isort = []
-    for e in s.board.legal_moves:
+    for e in ordered_moves:
         s.board.push(e)
         isort.append((v(s), e))
         s.board.pop()
@@ -159,6 +167,36 @@ def computer_minimax(s, v, depth, a, b, big=False):
         return ret, bret
     else:
         return ret
+
+def print_statistics():
+    avg_time = sum(move_times) / len(move_times) if move_times else 0
+    print("Average time per move: {:.2f} seconds".format(avg_time))
+    print("Total moves: {}".format(len(moves)//2))
+    print("Moves: {}".format(' '.join(moves)))
+    print("Lichess analysis: https://lichess.org/analysis/{}".format(s.board.fen()))
+
+
+def signal_handler(signal, frame):
+    print('You pressed Ctrl+C!')
+    print_statistics()
+    sys.exit(0)
+
+if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+    signal.signal(signal.SIGINT, signal_handler)
+
+
+def order_moves(board):
+    checks = []
+    captures = []
+    others = []
+    for move in board.legal_moves:
+        if board.is_check():
+            checks.append(move)
+        elif board.is_capture(move):
+            captures.append(move)
+        else:
+            others.append(move)
+    return checks, captures, others
 
 
 def explore_leaves(s, v):
@@ -207,7 +245,10 @@ def move_coordinates():
         )
         if move is not None and move != "":
             try:
+                start_time = time.time()
                 s.board.push_san(move)
+                move_times.append(time.time() - start_time)
+                moves.append(move)  # Append player move to moves list
                 computer_move(s, v)
             except Exception:
                 traceback.print_exc()
@@ -215,8 +256,9 @@ def move_coordinates():
         return app.response_class(response=s.board.fen(), status=200)
     else:
         print("GAME IS OVER")
+        print_statistics()  # Print statistics at end of game
         return app.response_class(response="game over", status=200)
-
+    
 
 @app.route("/newgame")
 def newgame():
@@ -233,8 +275,10 @@ def computer_move(s, v):
     print("top 3:")
     for i, m in enumerate(move[0:3]):
         print("  ", m)
-    print(s.board.turn, "moving", move[0][1])
+    print(("White" if s.board.turn else "Black"), "moving", move[0][1])
+    san_move = s.board.san(move[0][1])  # Convert move to SAN before pushing
     s.board.push(move[0][1])
+    moves.append(san_move)  # Append AI move to moves list
 
 
 @app.route("/selfplay")
